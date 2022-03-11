@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+{% load static %}
+
+<link rel="stylesheet" type="text/css" href="{% static 'jvmg/styles.css' %}">
+<script rel="javascript" src="{% static 'jvmg/scripts.js' %}"></script>
+
+<html lang="en">
+  <head>
+    <!-- <meta charset="UTF-8"> -->
+    <!-- <meta name="viewport" content="width=device-width, initial-scale=1.0"> -->
+    <title>{{resource_label}}</title>
+  </head>
+  <body>
+    <h1>{{resource_label}}</h1>
+    <nav>
+      <a href="#" class=switch-mode>
+        <span class=text-for-light>Light Mode</span>
+        <span class=text-for-dark>Dark Mode</span>
+      </a>
+    </nav>
+    <table>
+      <tr><th>Property</th><th>Value</th><th>Count</th></tr>
+      {% for item in table %}
+      <tr>
+        <td>
+          <a href="{{ item.property }}">{{item.property_label}}</a>
+        </td>
+        <td>
+          <a href="{{ item.value }}">{{item.value_label}}</a>
+        </td>
+        <td>
+          <span>{{item.count}}</span>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </body>
+</html>

@@ -1,0 +1,18 @@
+{% if predicate.is_subject %}
+<a href="{{predicate.predicate_data.uri}}">
+  {% for item in predicate.predicate_data.labels %}
+  {% include "jvmg/span.html" with item=item %}
+  {% endfor %}
+</a>
+{% else %}
+is <a href="{{predicate.predicate_data.uri}}">
+  {% for item in predicate.predicate_data.labels %}
+    {% include "jvmg/span.html" with item=item %}
+  {% endfor %}
+</a> of
+{% endif %}
+
+{% if predicate.num_objects > 7 %}
+<br>
+<span class=count>{{predicate.num_objects}}</span>
+{% endif %}

@@ -1,0 +1,11 @@
+{% if not object.uri %}
+{% for item in object.labels %}
+{% include "jvmg/span.html" with item=item %}
+{% endfor %}
+{% else %}
+<a href="{{object.uri}}">
+  {% for item in object.labels %}
+  {% include "jvmg/span.html" with item=item %}
+  {% endfor %}
+  </a>
+{% endif %}

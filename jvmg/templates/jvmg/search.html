@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+{% load static %}
+
+
+<html lang="en" class="search">
+  <head>
+    <link rel="stylesheet" type="text/css" href="{% static 'jvmg/styles.css' %}">
+    <script rel="javascript" src="{% static 'jvmg/scripts.js' %}"></script>
+
+    <!-- <meta charset="UTF-8"> -->
+    <!-- <meta name="viewport" content="width=device-width, initial-scale=1.0"> -->
+    <title>JVMG-Search</title>
+  </head>
+  <body>
+    <h1>JVMG-Search</h1>
+    <nav>
+      <a href="#" class=switch-mode>
+        <span class=text-for-light>Light Mode</span>
+        <span class=text-for-dark>Dark Mode</span>
+      </a>
+    </nav>
+    <form action="{% url 'search' %}" method="GET">
+      <label for="subject">Subject</label>
+      <input type="text" name="subject" value="{{subject}}" placeholder="Optional">
+      <label for="predicate">Predicate</label>
+      <input type="text" name="predicate" value="{{predicate}}" placeholder="Optional">
+      <label for="object">Object</label>
+      <input type="text" name="object" value="{{object}}" placeholder="Optional">
+      <button>Search</button>
+    </form>
+
+    {% if table %}
+    <br>
+    Entries found: {{table_len}}
+    <table>
+      <tr><th>Nr.</th><th>Subject-URI</th><th>Search Label</th></tr>
+      {% for item in table %}
+      <tr>
+        <td>{{forloop.counter}}</td>
+        <td>
+          <a href="{{item.subject_link}}">{{item.subject}}</a>
+        </td>
+        <td>
+          <a href="{{item.predicate_link}}">{{item.predicate}}</a>
+        </td>
+        <td>
+          {% if item.object_link %}
+            <a href="{{item.object_link}}">{{item.object}}</a>
+          {% else %}
+            {{item.object}}
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+  </body>
+</html>

@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+{% load static %}
+<meta charset="utf-8">
+<link rel="stylesheet" type="text/css" href="{% static 'jvmg/styles.css' %}">
+<script rel="javascript" src="{% static 'jvmg/scripts.js' %}"></script>
+<title>{{resource_label.labels.0}}</title>
+
+{% include "jvmg/nav.html" %}
+<h1>{% include "jvmg/object_link.html" with object=resource_label%}</h1>
+<span class="resource">Resource: <a href="{{resource_uri}}">{{resource_uri}}</a></span>
+
+
+{% for graph in URI_data %}
+<hr>
+{% include "jvmg/graph.html" with graph=graph %}
+{% endfor %}
+
+{% if ont_table %}
+{% include "jvmg/select_table.html" with title="Ontology-Info" %}
+{% endif %}
+{% include "jvmg/footer.html" %}

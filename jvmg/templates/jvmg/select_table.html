@@ -1,0 +1,15 @@
+<div>
+  <h2>{{title}}</h2>
+  <table class="select">
+  <tr>
+    <th>{{ont_table.header.1}}</th>
+    <th>{{ont_table.header.2}}</th>
+  </tr>
+  {% for row in ont_table.data %}
+  <tr>
+    <td><a href="{{row.0}}">{{row.1}}</a></td>
+    <td>{{row.2}}</td>
+  </tr>
+  {% endfor %}
+  </table>
+</div>

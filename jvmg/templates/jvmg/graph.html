@@ -1,0 +1,26 @@
+<div class="graph">
+  <h2 class="graph">Graph: {% include "jvmg/object_link.html" with object=graph.graph_label%}<a class="graph_toggle" href="#"></a></h2>
+  <table>
+    <th>Property</th><th>Value</th>
+    {% for predicate in graph.predicates %}
+    <tr>
+      <td>
+        {% include "jvmg/predicate_link.html" with predicate=predicate %}
+      </td>
+      <td>
+        {% if predicate.num_objects == 1 %}
+          {% include "jvmg/object_link.html" with object=predicate.objects.0 %}
+        {% else %}
+        <ul>
+          {% for object in predicate.objects %}
+          <li>
+            {% include "jvmg/object_link.html" with object=object %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </table>
+</div>

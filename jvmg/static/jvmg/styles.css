@@ -1,0 +1,80 @@
+html { font-family: sans-serif; background: hsl(0, 0%, 95%); color: hsl(0, 0%, 10%);
+  margin: 0; padding: 25px 50px; }
+body { background: white; box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+  margin: 0; padding: 20px; position: relative; }
+
+h1 { font-size: 35px; margin: 0; padding: 10px 0 20px 10px; }
+a { color: hsl(210, 60%, 50%); text-decoration: none; }
+a:hover, a:focus, a:active { color: hsl(210, 60%, 25%); text-decoration: underline; }
+
+table { border-spacing: 0; box-sizing: border-box; width: 100%;  }
+table th { text-align: left; padding: 10px; }
+table td { vertical-align: top; padding: 10px; }
+table td ul { margin: 0; padding: 0; list-style: outside; column-width: 400px; }
+table td ul > li { margin: 3px 0; break-inside: avoid; }
+table tr:nth-of-type(even) td { background: hsl(0, 0%, 90%); }
+table tr td:nth-of-type(1) { width: 200px; }
+/* table td span { white-space: pre-line; } */
+h2 { display: flex; }
+h2.graph a { margin-left: 10px; }
+h2 > a.graph_toggle { margin-left: auto; font-size:0.77em; }
+
+h2.no-data-found { margin-left: 10px; }
+
+a.graph { color: gray; font-size: 0.77em; }
+span.resource { margin-left: 10px; }
+span.count { color: grey; font-size: 0.85em; }
+span.info { color: hsl(0, 0%, 26%); font-size: 0.65em; }
+span[lang]::after { content: attr(lang); color: gray; font-size: 0.77em; padding-left: 3px; }
+a[lang]::after { padding-left: 3px; }
+/* lang attribute in ISO 639-1 (languages), files use ISO 3166-1 alpha-2 (countries) and the comment is the language name  */
+span[lang^=bg]::after, a[lang^=bg]::after { content: url(bg.png); }  /* Bulgarian */
+span[lang^=cs]::after, a[lang^=cs]::after { content: url(cz.png); }  /* Czech */
+span[lang^=de]::after, a[lang^=de]::after { content: url(de.png); }  /* Germany */
+span[lang^=en]::after, a[lang^=en]::after { content: url(gb.png); }  /* English */
+span[lang^=es]::after, a[lang^=es]::after { content: url(es.png); }  /* Spanish, Castilian */
+span[lang^=fr]::after, a[lang^=fr]::after { content: url(fr.png); }  /* French */
+span[lang^=hu]::after, a[lang^=hu]::after { content: url(hu.png); }  /* Hungarian */
+span[lang^=it]::after, a[lang^=it]::after { content: url(it.png); }  /* Italian */
+span[lang^=ja]::after, a[lang^=ja]::after { content: url(jp.png); }  /* Japanese */
+span[lang^=ko]::after, a[lang^=ko]::after { content: url(kr.png); }  /* Korean */
+span[lang^=pl]::after, a[lang^=pl]::after { content: url(pl.png); }  /* Polish */
+span[lang^=pt]::after, a[lang^=pt]::after { content: url(pt.png); }  /* Portuguese */
+span[lang^=ru]::after, a[lang^=ru]::after { content: url(ru.png); }  /* Russian */
+span[lang^=th]::after, a[lang^=th]::after { content: url(th.png); }  /* Thai */
+span[lang^=tr]::after, a[lang^=tr]::after { content: url(tr.png); }  /* Turkish */
+span[lang^=uk]::after, a[lang^=uk]::after { content: url(ua.png); }  /* Ukrainian */
+span[lang^=zh]::after, a[lang^=zh]::after { content: url(cn.png); }  /* Chinese */
+h1 span[lang]::after { content: none; }
+
+nav { position: absolute; top: 0; right: 0; margin: 0; padding: 0.5em 1em; }
+nav a { margin-left: 1em; }
+
+div.footer a { margin-left: auto; }
+div.footer { display: flex; margin: 2em 0 0 0;}
+
+div.dropdown:not(.open) > div {display: none;}
+div.dropdown {display: inline; position: relative; }
+div.dropdown > div { position: absolute;
+  top: 100%; right: 0%;
+  box-shadow: 0 0 5px rgb(0,0,0,0.5);
+  padding: 0.5em;
+  background: white;
+}
+div.graph_selector.dropdown label {white-space: pre; display: block; padding: 0.2em;}
+div.lang_selector.dropdown > div a {white-space: pre; display: block; margin-left: 0; padding: 0.2em; }
+
+div.dropdown:hover > div{ display: block; }
+
+html:not(.dark-mode) nav a.switch-mode span.text-for-light { display: none; }
+html.dark-mode nav a.switch-mode span.text-for-dark { display: none; }
+
+html.dark-mode { background: hsl(0, 0%, 16%); color: hsl(0, 0%, 85%); }
+html.dark-mode body { background: hsl(0, 0%, 5%); box-shadow: 0 0 10px rgba(0, 0, 0, 0.5); }
+html.dark-mode a { color: hsl(210, 45%, 60%);  }
+html.dark-mode a:hover, html.dark-mode a:focus, html.dark-mode a:active { color: hsl(210, 100%, 50%); }
+html.dark-mode table tr:nth-of-type(even) td { background: hsl(0, 0%, 16%); }
+html.dark-mode a.graph, html.dark-mode span.count { color: gray; }
+html.dark-mode span.info { color: lightgray; }
+html.dark-mode div.dropdown > div {background: hsl(0, 0%, 16%);}
+hr { border: none; height: 2px; background-color: lightgray; margin-top: 40px; }
