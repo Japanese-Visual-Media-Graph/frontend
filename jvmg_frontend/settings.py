@@ -138,36 +138,29 @@ PREFIX label: <http://www.w3.org/2000/01/rdf-schema#label>
 PREFIX graph_label: <http://mediagraph.link/jvmg/ont/shortLabel>
 
 CONSTRUCT {
-  GRAPH ?graph {
-    ?subject ?predicate   ?object .
-      ?graph   graph_label: ?graphLabel .
-    }
-    ?object    label:   ?objectLabel    .
-    ?subject   label:   ?subjectLabel   .
-    ?predicate label:   ?predicateLabel .
-
-    GRAPH ?backLinkGraph {
-      ?backLinkSubject  ?backLinkPredicate ?subject .
-      ?backLinkGraph    graph_label:       ?backLinkGraphLabel .
-    }
-    ?backLinkSubject   label:       ?backLinkSubjectLabel   .
-    ?backLinkPredicate label:       ?backLinkPredicateLabel .
-  } WHERE {
-    GRAPH ?graph {
-      ?subject ?predicate ?object . FILTER ( ?subject = <$resource> )
-    }
-    OPTIONAL { ?graph     graph_label: ?graphLabel     }
-    OPTIONAL { ?object    label:  ?objectLabel    }
-    OPTIONAL { ?subject   label:  ?subjectLabel   }
-    OPTIONAL { ?predicate label:  ?predicateLabel }
-    OPTIONAL {
-      GRAPH ?backLinkGraph {
-        ?backLinkSubject ?backLinkPredicate ?subject .
-      }
-      OPTIONAL { ?backLinkGraph  graph_label: ?backLinkGraphLabel     }
-      OPTIONAL { ?backLinkSubject   label:   ?backLinkSubjectLabel   }
-      OPTIONAL { ?backLinkPredicate label:   ?backLinkPredicateLabel }
-    }
-}"""
+  Graph ?graph {
+    ?s ?p ?o .
+  }
+  ?s label: ?s_label .
+  ?p label: ?p_label .
+  ?o label: ?o_label .
+  ?graph graph_label: ?graph_label
+} where {
+  { GRAPH ?graph {  ?s ?p ?o . filter(?s = <$resource>) }
+    OPTIONAL { ?graph graph_label: ?graph_label}
+    OPTIONAL { ?s label: ?s_label}
+    OPTIONAL { ?p label: ?p_label}
+    OPTIONAL { ?o label: ?o_label}
+}
+  UNION 
+  {
+    GRAPH ?graph {?s ?p ?o . filter(?o = <$resource>)}
+    OPTIONAL { ?graph graph_label: ?graph_label}
+    OPTIONAL { ?s label: ?s_label}
+    OPTIONAL { ?p label: ?p_label}
+    OPTIONAL { ?o label: ?o_label}
+  }
+}
+"""
 
 ELASTICSEARCH = "http://127.0.0.1:9200"
