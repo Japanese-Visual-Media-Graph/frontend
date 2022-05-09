@@ -50,7 +50,8 @@ CONSTRUCT {
     ?object    label:   ?objectLabel    .
     ?subject   label:   ?subjectLabel   .
     ?predicate label:   ?predicateLabel .
-  } WHERE {
+    }
+} WHERE {
     ?subject ?predicate ?object . FILTER ( ?subject = <$resource> )
     OPTIONAL { ?object    label:  ?objectLabel    }
     OPTIONAL { ?subject   label:  ?subjectLabel   }
