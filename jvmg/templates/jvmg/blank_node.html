@@ -1,0 +1,11 @@
+<table class="blank_node">
+  {% for predicate, objects in blank_node.items %}
+  <tr>
+    <td>{% include "jvmg/object_link.html" with object=predicate %}</td>
+    {% for object in objects %}
+    <td>{% include "jvmg/object_link.html" with object=object %}</td>
+    {% endfor %}
+  </tr>
+  {% endfor %}
+</table>
+

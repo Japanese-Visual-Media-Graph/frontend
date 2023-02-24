@@ -1,15 +1,15 @@
-{% if predicate.is_subject %}
-<a href="{{predicate.predicate_data.uri}}">
-  {% for item in predicate.predicate_data.labels %}
-  {% include "jvmg/span.html" with item=item %}
-  {% endfor %}
-</a>
-{% else %}
-is <a href="{{predicate.predicate_data.uri}}">
-  {% for item in predicate.predicate_data.labels %}
+{% if predicate.is_back_link %}
+is <a href="{{predicate.info.uri}}">
+  {% for item in predicate.info.labels %}
     {% include "jvmg/span.html" with item=item %}
   {% endfor %}
 </a> of
+{% else %}
+<a href="{{predicate.info.uri}}">
+  {% for item in predicate.info.labels %}
+  {% include "jvmg/span.html" with item=item %}
+  {% endfor %}
+</a>
 {% endif %}
 
 {% if predicate.num_objects > 7 %}

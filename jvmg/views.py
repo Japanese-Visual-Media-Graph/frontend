@@ -1,14 +1,149 @@
+from dataclasses import InitVar, dataclass, field
+from typing import Tuple, Union
+from urllib.error import URLError
 from django.shortcuts import render
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
+from django.core.validators import URLValidator
+from django.core.exceptions import ValidationError
 from difflib import SequenceMatcher
 from SPARQLWrapper import SPARQLWrapper, XML, JSONLD, TURTLE, JSON
-from rdflib import URIRef, BNode
+import rdflib
+from rdflib import ConjunctiveGraph, Literal, URIRef, BNode
+from rdflib.term import Node
 from django.conf import settings
+from time import perf_counter
 import elasticsearch
+from elastic_transport import ConnectionError
+import logging
+
+logger = logging.getLogger("default")
+slow_logger = logging.getLogger("slow")
 
 
-def rewrite_URL(URL):
-    return URL.replace(settings.DATASET_BASE, str(settings.WEB_BASE))
+def rewrite_url(url: URIRef) -> URIRef:
+    return URIRef(url.replace(settings.DATASET_BASE, str(settings.WEB_BASE)))
+
+
+@dataclass
+class Info:
+    item: Union[Node, rdflib.Graph]
+    sparql_result: InitVar[ConjunctiveGraph]
+    uri: URIRef = field(init=False)
+    labels: list[Literal] = field(init=False)
+
+    def __post_init__(self, sparql_result: ConjunctiveGraph):
+        if isinstance(self.item, BNode):
+            self.labels = [Literal(str(self.item))]
+        elif isinstance(self.item, Literal):
+            self.labels = [self.item]
+
+        elif isinstance(self.item, URIRef) or isinstance(self.item, rdflib.Graph):
+            if isinstance(self.item, URIRef):
+                self.uri = self.item
+                label_uris: list[URIRef] = [URIRef(label_uri) for label_uri in settings.LABEL_URIS]
+            else:
+                self.uri = self.item.identifier
+                label_uris: list[URIRef] = [URIRef(label_uri) for label_uri in settings.GRAPH_LABEL_URIS]
+
+            self.labels = []
+            for label_uri in label_uris:
+                for label in set(sparql_result.objects(subject=self.uri, predicate=label_uri)):
+                    if isinstance(label, Literal):
+                        self.labels.append(label)
+            if self.labels:
+                self.labels.sort()
+            else:
+                self.labels = [Literal(self.uri)]
+
+            self.uri = rewrite_url(self.uri)
+
+
+@dataclass
+class Blank_node:
+    uri: BNode
+    sparql_result: ConjunctiveGraph
+    info: Info = field(init=False)
+    items: list[Tuple[Info, list[Info]]] = field(init=False)
+
+    def __post_init__(self):
+        self.info = Info(self.uri, self.sparql_result)
+        self.items = []
+
+        for predicate in set(self.sparql_result.predicates(subject=self.uri)):
+            objects = [
+                Info(object, self.sparql_result)
+                for object in self.sparql_result.objects(subject=self.uri, predicate=predicate)
+            ]
+            objects.sort(key=lambda item: "".join(item for item in item.labels))
+            self.items.append((Info(predicate, self.sparql_result), objects))
+
+@dataclass
+class Predicate:
+    graph: rdflib.Graph
+    sparql_result: ConjunctiveGraph
+    uri: Node
+    is_back_link: bool = False
+    objects: list[Info] = field(init=False)
+    blank_nodes: list[Blank_node] = field(init=False)
+    labels: list[Literal] = field(init=False)
+    info: Info = field(init=False)
+    num_objects: int = field(default=0)
+
+    def __post_init__(self):
+        self.info = Info(self.uri, self.sparql_result)
+
+        if self.is_back_link:
+            self.objects = [
+                Info(subject, self.sparql_result)
+                for subject in set(self.graph.subjects(predicate=self.uri))
+                if not isinstance(subject, BNode)
+            ]
+
+            self.blank_nodes = [
+                Blank_node(bnode, self.sparql_result)
+                for bnode in set(self.graph.subjects(predicate=self.uri))
+                if isinstance(bnode, BNode)
+            ]
+        else:
+            self.objects = [
+                Info(object, self.sparql_result)
+                for object in set(self.graph.objects(predicate=self.uri))
+                if not isinstance(object, BNode)
+            ]
+
+            self.blank_nodes = [
+                Blank_node(bnode, self.sparql_result)
+                for bnode in set(self.graph.objects(predicate=self.uri))
+                if isinstance(bnode, BNode)
+            ]
+
+
+        self.objects.sort(key=lambda item: "".join(item for item in item.labels))
+        self.blank_nodes.sort(key=lambda item: "".join(item for item in item.info.labels))
+        self.num_objects = len(self.objects) + len(self.blank_nodes)
+
+
+@dataclass
+class Graph:
+    graph: rdflib.Graph
+    sparql_result: ConjunctiveGraph
+    resource_uri: URIRef
+    predicates: list[Predicate] = field(init=False)
+    info: Info = field(init=False)
+
+    def __post_init__(self):
+        self.info = Info(self.graph, self.sparql_result)
+
+        self.predicates = [
+            Predicate(graph=self.graph, sparql_result=self.sparql_result, uri=predicate)
+            for predicate in set(self.graph.predicates(subject=self.resource_uri))
+        ]
+        back_links = [
+            Predicate(graph=self.graph, sparql_result=self.sparql_result, uri=predicate, is_back_link=True)
+            for predicate in set(self.graph.predicates(object=self.resource_uri))
+        ]
+        self.predicates.extend(back_links)
+        self.predicates.sort(key=lambda predicate: "".join(label for label in predicate.info.labels))
 
 
 def main(request, path):
@@ -40,26 +175,16 @@ def get_data(path, data_format, content_type):
     Uses the sparql_query and sparql_endpoint to get the rdf_data (defined in setting.py).
     Dependent on the data_format and content_type (xml, ttl and jsonld) we return
     the sparql_result directly or create the following data structure which is used to create HTML.
-
-    Data structure:
-    quads_by_graph = {
-        graph_uris: {
-            "graph_label": graph_label_info,
-            "predicates": {
-               "predicate_data": predicate_label_info,
-               "is_subject": boolean     # if current predicate is a backlink
-               "object": [object_label_info]
-          }
-       }
-    }
-
-    label_info stores URI and their labels or just the labels if it is a literal
-    label_info = {
-        "labels" = [labels],
-        "uri" = URI or None
-    }
     """
     resource_uri = URIRef(settings.DATASET_BASE + path)
+    url_val = URLValidator()
+    try:
+        url_val(resource_uri)
+    except ValidationError:
+        logger.warning(f"No data for {resource_uri}<")
+        raise Http404
+    
+    logger.info(f"uri: {resource_uri}")
 
     # we don't use format() to avoid escaping all the curly braces in sparql queries
     query = settings.QUERY.replace("$resource", resource_uri)
@@ -67,90 +192,36 @@ def get_data(path, data_format, content_type):
     sparql = SPARQLWrapper(settings.SPARQL_ENDPOINT)
     sparql.setQuery(query)
     sparql.setReturnFormat(data_format)
-    sparql_result = sparql.query().convert()
+    start = perf_counter()
+    try:
+        sparql_result = sparql.query().convert()
+    except URLError as e:
+        logger.error(f"No connection to sparql endpoint: {settings.SPARQL_ENDPOINT}!")
+        raise e    
+    
+    if len(sparql_result) == 0:
+        logger.warning(f"No data for {resource_uri}")
+        raise Http404
+
+    query_time = perf_counter() - start
+    if query_time > settings.SLOW_LOG_THRESHOLD:
+        slow_logger.info(f"uri: {resource_uri} time: {query_time}")    
 
     # if content_type is not json, send
     if content_type == "application/rdf+xml" or content_type == "text/turtle" or content_type == "application/json":
         return HttpResponse(sparql_result, content_type=content_type)
 
-    def get_labels_for(URI_or_literal, custom_labels):
-        """
-        returns label_info
-        label_info stores URI and their labels or just the labels if it is a literal
-        label_info = {
-            "labels" = [labels],
-            "uri" = URI or None
-        }
-
-        it uses the LABEL_URIS defined in settings.py to find labels
-        """
-
-        custom_labels = [URIRef(label) for label in custom_labels]
-        label_info = {}
-        if isinstance(URI_or_literal, URIRef):
-            labels = sparql_result.preferredLabel(URI_or_literal,
-                                                  labelProperties=custom_labels,
-                                                  default=None)
-            if labels:
-                labels = [label for _, label in labels]
-                label_info["labels"] = sorted(labels)
-            else:
-                label_info["labels"] = [URI_or_literal]
-
-            label_info["uri"] = rewrite_URL(URI_or_literal)
-
-        else:
-            label_info["labels"] = [URI_or_literal]
-            label_info["uri"] = None
-
-        return label_info
-
-    # create datastructe from RDF data
-    quads_by_graph = {}
-    for subject_uri, predicate_uri, object_uri, graph in sparql_result.quads():
-        if type(graph.identifier) is BNode:
-            continue
-
-        graph_key = graph.identifier
-        object = None
-        is_subject = True
-        if subject_uri == resource_uri:
-            object = object_uri
-        elif object_uri == resource_uri:
-            is_subject = False
-            object = subject_uri
-        else:
-            # otherwise it's a label or not directly connected with the resource_uri
-            continue
-
-        if graph_key not in quads_by_graph:
-            quads_by_graph[graph_key] = {
-                "graph_label": get_labels_for(graph.identifier, settings.GRAPH_LABEL_URIS),
-                "predicates": {},
-            }
-
-        predicate_key = (predicate_uri, is_subject)
-        if predicate_key not in quads_by_graph[graph_key]["predicates"]:
-            quads_by_graph[graph_key]["predicates"][predicate_key] = {
-                "predicate_data": get_labels_for(predicate_uri, settings.LABEL_URIS),
-                "is_subject": is_subject,
-                "objects": []
-            }
-
-        quads_by_graph[graph_key]["predicates"][predicate_key]["objects"].append(get_labels_for(object, settings.LABEL_URIS))
-
-    # sort by graph, predicates and objects so the presentation of the data does not change on a refresh
-    quads_by_graph = sorted(quads_by_graph.values(), key=lambda graph: "".join(graph["graph_label"]["labels"]))
-    for graph in quads_by_graph:
-        graph["predicates"] = sorted(graph["predicates"].values(), key=lambda predicate: predicate["predicate_data"]["labels"])
-        for predicate in graph["predicates"]:
-            predicate["objects"].sort(key=lambda object: "".join(object["labels"]))
-            predicate["num_objects"] = len(predicate["objects"])
-
+    graphs = [
+        Graph(graph=graph, sparql_result=sparql_result, resource_uri=resource_uri)
+        for graph in sparql_result.contexts()
+        if not isinstance(graph.identifier, BNode)
+    ]
+    graphs.sort(key=lambda graph: graph.info.labels)
+    
     context = {}
-    context["resource_label"] = get_labels_for(resource_uri, settings.LABEL_URIS)
+    context["resource_label"] = Info(resource_uri, sparql_result)
     context["resource_uri"] = resource_uri
-    context["URI_data"] = quads_by_graph
+    context["URI_data"] = graphs
     context["nsfw_graphs"] = settings.NSFW_GRAPHS
     context["web_base"] = settings.WEB_BASE
 
@@ -163,6 +234,7 @@ def search(request):
     """
     context = {"table": []}
     if "subject" in request.GET or "predicate" in request.GET or "object" in request.GET:
+        logger.info(f"search terms: {request.GET['subject']} {request.GET['predicate']} {request.GET['object']}")
         es = elasticsearch.Elasticsearch(settings.ELASTICSEARCH)
 
         # create search pattern
@@ -177,7 +249,11 @@ def search(request):
                   "query":
                   {"bool":
                    {"must": wildcards}}}
-        res = es.search(body=search, index="jvmg_search",)
+        try:
+            res = es.search(body=search, index="jvmg_search",)
+        except ConnectionError as e:
+            logger.error(f"No connection to elasticsearch: {settings.ELASTICSEARCH}")
+            raise e
 
         # change scoring and rewrite_URLs
         new_score_res = []
@@ -188,10 +264,10 @@ def search(request):
 
             object_link = None
             if isinstance(item["_source"]["object"], URIRef):
-                object_link = rewrite_URL(item["_source"]["object"])
-            new_item = {"subject_link": rewrite_URL(item["_source"]["subject"]),
+                object_link = rewrite_url(item["_source"]["object"])
+            new_item = {"subject_link": rewrite_url(item["_source"]["subject"]),
                         "subject": item["_source"]["subject"],
-                        "predicate_link": rewrite_URL(item["_source"]["predicate"]),
+                        "predicate_link": rewrite_url(item["_source"]["predicate"]),
                         "predicate": item["_source"]["predicate"],
                         "object_link": object_link,
                         "object": item["_source"]["object"],
@@ -242,7 +318,7 @@ def uri_lookup_ont(request, path):
         row = []
         for header in ont_table["header"]:
             if item[header]["type"] == "uri":
-                row.append(rewrite_URL(item[header]["value"]))
+                row.append(rewrite_url(item[header]["value"]))
             else:
                 row.append(item[header]["value"])
         ont_table["data"].append(row)
@@ -291,9 +367,9 @@ def uri_crosstab(request):
 
         trait_count.append({"count": int(entry["count"]["value"]),
                             "value_label": value_label,
-                            "property": rewrite_URL(entry["property"]["value"]),
+                            "property": rewrite_url(entry["property"]["value"]),
                             "property_label": property_label,
-                            "value": rewrite_URL(entry["value"]["value"])})
+                            "value": rewrite_url(entry["value"]["value"])})
 
     context = {}
     context["table"] = trait_count

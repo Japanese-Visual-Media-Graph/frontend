@@ -123,6 +123,7 @@ STATIC_URL = '/static/'
 # STATIC_ROOT = '/opt/static/'
 
 # project specific
+SLOW_LOG_THRESHOLD = 1.0 # threshold for slow log: how long (in seconds) a query can take until it is logged into the slow log 
 SPARQL_ENDPOINT = "http://localhost:3030/jvmg"
 DATASET_BASE = "http://mediagraph.link/"
 #WEB_BASE = "http://mediagraph.link/"
@@ -140,27 +141,79 @@ PREFIX graph_label: <http://mediagraph.link/jvmg/ont/shortLabel>
 CONSTRUCT {
   Graph ?graph {
     ?s ?p ?o .
+    ?o ?p_blank ?o_blank .
+    ?graph graph_label: ?graph_label .
+    ?p_blank label: ?p_blank_label .
+    ?o_blank label: ?o_blank_label .
   }
   ?s label: ?s_label .
   ?p label: ?p_label .
   ?o label: ?o_label .
-  ?graph graph_label: ?graph_label
+
 } where {
-  { GRAPH ?graph {  ?s ?p ?o . filter(?s = <$resource>) }
-    OPTIONAL { ?graph graph_label: ?graph_label}
-    OPTIONAL { ?s label: ?s_label}
-    OPTIONAL { ?p label: ?p_label}
-    OPTIONAL { ?o label: ?o_label}
-}
-  UNION 
   {
-    GRAPH ?graph {?s ?p ?o . filter(?o = <$resource>)}
+    GRAPH ?graph {
+      ?s ?p ?o . filter(?s = <$resource>)
+      OPTIONAL { ?o ?p_blank ?o_blank filter isBlank(?o)
+        OPTIONAL { ?p_blank label: ?p_blank_label }
+        OPTIONAL { ?o_blank label: ?o_blank_label }
+      }
+
+    }
     OPTIONAL { ?graph graph_label: ?graph_label}
+    OPTIONAL { ?o label: ?o_label}
+    OPTIONAL { ?p label: ?p_label}
+  }
+  UNION
+  {
+    GRAPH ?graph {
+      ?s ?p ?o . filter(?o = <$resource>)
+      OPTIONAL { ?graph graph_label: ?graph_label }
+    }
     OPTIONAL { ?s label: ?s_label}
     OPTIONAL { ?p label: ?p_label}
-    OPTIONAL { ?o label: ?o_label}
   }
 }
 """
 
 ELASTICSEARCH = "http://127.0.0.1:9200"
+
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '%(levelname)s %(asctime)s %(module)s %(message)s'
+        },
+        'simple': {
+            'format': '%(levelname)s %(asctime)s %(message)s'
+        },
+    },
+    'handlers': {
+        'file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': 'access.log',
+            'formatter': 'verbose'
+        },
+        'slow': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': 'slow.log',
+            'formatter': 'verbose'
+        },
+    },
+    'loggers': {
+        'default': {
+            'handlers': ['file'],
+            'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
+            'propagate': True,
+        },
+        'slow': {
+            'handlers': ['slow'],
+            'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
+            'propagate': True,
+        },
+    },
+}

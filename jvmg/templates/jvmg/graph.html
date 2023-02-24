@@ -1,5 +1,5 @@
 <div class="graph">
-  <h2 class="graph">Graph: {% include "jvmg/object_link.html" with object=graph.graph_label%}<a class="graph_toggle" href="#"></a></h2>
+  <h2 class="graph">Graph: {% include "jvmg/object_link.html" with object=graph.info%}<a class="graph_toggle" href="#"></a></h2>
   <table>
     <th>Property</th><th>Value</th>
     {% for predicate in graph.predicates %}
@@ -18,6 +18,9 @@
           </li>
           {% endfor %}
         </ul>
+        {% for blank_node in predicate.blank_nodes %}
+        {% include "jvmg/blank_node.html" with blank_node=blank_node %}
+        {% endfor %}
         {% endif %}
       </td>
     </tr>
