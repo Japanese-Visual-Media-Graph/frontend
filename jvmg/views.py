@@ -88,6 +88,7 @@ class Predicate:
     labels: list[Literal] = field(init=False)
     info: Info = field(init=False)
     num_objects: int = field(default=0)
+    num_blank_nodes: int = field(default=0)
 
     def __post_init__(self):
         self.info = Info(self.uri, self.sparql_result)
@@ -120,7 +121,8 @@ class Predicate:
 
         self.objects.sort(key=lambda item: "".join(item for item in item.labels))
         self.blank_nodes.sort(key=lambda item: "".join(item for item in item.info.labels))
-        self.num_objects = len(self.objects) + len(self.blank_nodes)
+        self.num_objects = len(self.objects)
+        self.num_blank_nodes = len(self.blank_nodes)
 
 
 @dataclass

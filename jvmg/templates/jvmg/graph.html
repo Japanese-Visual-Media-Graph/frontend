@@ -3,6 +3,7 @@
   <table>
     <th>Property</th><th>Value</th>
     {% for predicate in graph.predicates %}
+    {% if predicate.num_objects > 0 %}
     <tr>
       <td>
         {% include "jvmg/predicate_link.html" with predicate=predicate %}
@@ -18,12 +19,23 @@
           </li>
           {% endfor %}
         </ul>
-        {% for blank_node in predicate.blank_nodes %}
-        {% include "jvmg/blank_node.html" with blank_node=blank_node %}
-        {% endfor %}
         {% endif %}
       </td>
     </tr>
+    {% endif %}
+
+    {% if predicate.num_blank_nodes > 0 %}
+    <tr>
+      <td>
+        {% include "jvmg/predicate_link.html" with predicate=predicate %}
+      </td>
+      <td>
+        {% for blank_node in predicate.blank_nodes %}
+        {% include "jvmg/blank_node.html" with blank_node=blank_node %}
+        {% endfor %}
+      </td>
+    </tr>
+    {% endif %}
   {% endfor %}
   </table>
 </div>
