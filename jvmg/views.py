@@ -82,6 +82,7 @@ class Predicate:
     graph: rdflib.Graph
     sparql_result: ConjunctiveGraph
     uri: Node
+    resource_uri: URIRef
     is_back_link: bool = False
     objects: list[Info] = field(init=False)
     blank_nodes: list[Blank_node] = field(init=False)
@@ -96,25 +97,25 @@ class Predicate:
         if self.is_back_link:
             self.objects = [
                 Info(subject, self.sparql_result)
-                for subject in set(self.graph.subjects(predicate=self.uri))
+                for subject in set(self.graph.subjects(predicate=self.uri, object=self.resource_uri))
                 if not isinstance(subject, BNode)
             ]
 
             self.blank_nodes = [
-                Blank_node(bnode, self.sparql_result)
-                for bnode in set(self.graph.subjects(predicate=self.uri))
+                Blank_node(uri=bnode, graph=self.graph, sparql_result=self.sparql_result)
+                for bnode in set(self.graph.subjects(predicate=self.uri, object=self.resource_uri))
                 if isinstance(bnode, BNode)
             ]
         else:
             self.objects = [
                 Info(object, self.sparql_result)
-                for object in set(self.graph.objects(predicate=self.uri))
+                for object in set(self.graph.objects(predicate=self.uri, subject=self.resource_uri))
                 if not isinstance(object, BNode)
             ]
 
             self.blank_nodes = [
-                Blank_node(bnode, self.sparql_result)
-                for bnode in set(self.graph.objects(predicate=self.uri))
+                Blank_node(uri=bnode, graph=self.graph, sparql_result=self.sparql_result)
+                for bnode in set(self.graph.objects(predicate=self.uri, subject=self.resource_uri))
                 if isinstance(bnode, BNode)
             ]
 
@@ -137,11 +138,15 @@ class Graph:
         self.info = Info(self.graph, self.sparql_result)
 
         self.predicates = [
-            Predicate(graph=self.graph, sparql_result=self.sparql_result, uri=predicate)
+            Predicate(graph=self.graph, sparql_result=self.sparql_result, uri=predicate, resource_uri=self.resource_uri)
             for predicate in set(self.graph.predicates(subject=self.resource_uri))
         ]
         back_links = [
-            Predicate(graph=self.graph, sparql_result=self.sparql_result, uri=predicate, is_back_link=True)
+            Predicate(graph=self.graph,
+                      sparql_result=self.sparql_result,
+                      uri=predicate,
+                      is_back_link=True,
+                      resource_uri=self.resource_uri)
             for predicate in set(self.graph.predicates(object=self.resource_uri))
         ]
         self.predicates.extend(back_links)
