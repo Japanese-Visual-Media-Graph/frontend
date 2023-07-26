@@ -102,7 +102,7 @@ class Predicate:
             ]
 
             self.blank_nodes = [
-                Blank_node(uri=bnode, graph=self.graph, sparql_result=self.sparql_result)
+                Blank_node(uri=bnode, sparql_result=self.sparql_result)
                 for bnode in set(self.graph.subjects(predicate=self.uri, object=self.resource_uri))
                 if isinstance(bnode, BNode)
             ]
@@ -114,7 +114,7 @@ class Predicate:
             ]
 
             self.blank_nodes = [
-                Blank_node(uri=bnode, graph=self.graph, sparql_result=self.sparql_result)
+                Blank_node(uri=bnode, sparql_result=self.sparql_result)
                 for bnode in set(self.graph.objects(predicate=self.uri, subject=self.resource_uri))
                 if isinstance(bnode, BNode)
             ]
