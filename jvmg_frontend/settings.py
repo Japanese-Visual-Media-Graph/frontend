@@ -124,7 +124,7 @@ STATIC_URL = '/static/'
 
 # project specific
 SLOW_LOG_THRESHOLD = 1.0 # threshold for slow log: how long (in seconds) a query can take until it is logged into the slow log 
-SPARQL_ENDPOINT = "http://localhost:3030/jvmg"
+SPARQL_ENDPOINT = "http://localhost:3030/jvmg/sparql"
 DATASET_BASE = "http://mediagraph.link/"
 #WEB_BASE = "http://mediagraph.link/"
 WEB_BASE = "http://127.0.0.1:8003/"
@@ -177,7 +177,8 @@ CONSTRUCT {
 """
 
 ELASTICSEARCH = "http://127.0.0.1:9200"
-
+SEARCH_INDEX = "default"
+ELASTICSEARCH_PAGE_SIZE = 20
 
 LOGGING = {
     'version': 1,

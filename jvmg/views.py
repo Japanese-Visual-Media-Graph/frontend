@@ -1,11 +1,12 @@
 from dataclasses import InitVar, dataclass, field
 from typing import Tuple, Union
 from urllib.error import URLError
+from django.http.response import JsonResponse
 from django.shortcuts import render
 from django.http import Http404, HttpResponse
 from django.core.validators import URLValidator
 from django.core.exceptions import ValidationError
-from difflib import SequenceMatcher
+from django.views.decorators.csrf import csrf_exempt
 from SPARQLWrapper import SPARQLWrapper, XML, JSONLD, TURTLE, JSON
 import rdflib
 from rdflib import ConjunctiveGraph, Literal, URIRef, BNode
@@ -13,8 +14,9 @@ from rdflib.term import Node
 from django.conf import settings
 from time import perf_counter
 import elasticsearch
-from elastic_transport import ConnectionError
 import logging
+import json
+
 
 logger = logging.getLogger("default")
 slow_logger = logging.getLogger("slow")
@@ -48,7 +50,7 @@ class Info:
             self.labels = []
             for label_uri in label_uris:
                 for label in set(sparql_result.objects(subject=self.uri, predicate=label_uri)):
-                    if isinstance(label, Literal):
+                    if isinstance(label, Literal) and len(label):
                         self.labels.append(label)
             if self.labels:
                 self.labels.sort()
@@ -153,7 +155,7 @@ class Graph:
         self.predicates.sort(key=lambda predicate: "".join(label for label in predicate.info.labels))
 
 
-def main(request, path):
+def main(request, path, query=None):
     """
     main entry point for URI lookups. reads the accept_headers/formats to returns the rdf data as requested.
     this includes:
@@ -165,19 +167,22 @@ def main(request, path):
     # get accept headers
     accept_header = request.headers.get("Accept", "text/html")
     accepted_formats = list(map(lambda format: format.split(";")[0], accept_header.split(",")))
+    if not query:
+        query = settings.QUERY
+
     for accepted_format in accepted_formats:
         if accepted_format == "application/rdf+xml":
-            return get_data(path, XML, "application/rdf+xml")
+            return get_data(path, XML, "application/rdf+xml", query)
         elif accepted_format == "text/turtle":
-            return get_data(path, TURTLE, "text/turtle")
+            return get_data(path, TURTLE, "text/turtle", query)
         elif accepted_format == "application/json":
-            return get_data(path, JSONLD, "application/json")
+            return get_data(path, JSONLD, "application/json", query)
         else:
-            context = get_data(path, JSONLD, "text/html")
+            context = get_data(path, JSONLD, "text/html", query)
             return render(request, "jvmg/main.html", context)
 
 
-def get_data(path, data_format, content_type):
+def get_data(path, data_format, content_type, query):
     """
     Uses the sparql_query and sparql_endpoint to get the rdf_data (defined in setting.py).
     Dependent on the data_format and content_type (xml, ttl and jsonld) we return
@@ -190,11 +195,11 @@ def get_data(path, data_format, content_type):
     except ValidationError:
         logger.warning(f"No data for {resource_uri}<")
         raise Http404
-    
+
     logger.info(f"uri: {resource_uri}")
 
     # we don't use format() to avoid escaping all the curly braces in sparql queries
-    query = settings.QUERY.replace("$resource", resource_uri)
+    query = query.replace("$resource", resource_uri)
 
     sparql = SPARQLWrapper(settings.SPARQL_ENDPOINT)
     sparql.setQuery(query)
@@ -204,15 +209,15 @@ def get_data(path, data_format, content_type):
         sparql_result = sparql.query().convert()
     except URLError as e:
         logger.error(f"No connection to sparql endpoint: {settings.SPARQL_ENDPOINT}!")
-        raise e    
-    
+        raise e
+
     if len(sparql_result) == 0:
         logger.warning(f"No data for {resource_uri}")
         raise Http404
 
     query_time = perf_counter() - start
     if query_time > settings.SLOW_LOG_THRESHOLD:
-        slow_logger.info(f"uri: {resource_uri} time: {query_time}")    
+        slow_logger.info(f"uri: {resource_uri} time: {query_time}")
 
     # if content_type is not json, send
     if content_type == "application/rdf+xml" or content_type == "text/turtle" or content_type == "application/json":
@@ -224,82 +229,138 @@ def get_data(path, data_format, content_type):
         if not isinstance(graph.identifier, BNode)
     ]
     graphs.sort(key=lambda graph: graph.info.labels)
-    
+
     context = {}
     context["resource_label"] = Info(resource_uri, sparql_result)
     context["resource_uri"] = resource_uri
     context["URI_data"] = graphs
     context["nsfw_graphs"] = settings.NSFW_GRAPHS
-    context["web_base"] = settings.WEB_BASE
 
     return context
 
 
+def get_cluster(request, path):
+    """returns a matched rdf cluster"""
+    return main(request, f"jvmg/{path}", query=settings.QUERY_CLUSTER)
+
+
+def get_label_for(uri, res):
+    LABEL = URIRef("http://www.w3.org/2000/01/rdf-schema#label")
+    label = "".join([str(label) for label in res.objects(subject=uri, predicate=LABEL)])
+    if len(label) == 0:
+        return str(uri)
+    else:
+        return label
+
+
 def search(request):
-    """
-    search function which reads get data from a requests and uses it to find stuff in elasticsearch
-    """
-    context = {"table": []}
-    if "subject" in request.GET or "predicate" in request.GET or "object" in request.GET:
-        logger.info(f"search terms: {request.GET['subject']} {request.GET['predicate']} {request.GET['object']}")
+    context = {}
+    if "search" in request.GET:
         es = elasticsearch.Elasticsearch(settings.ELASTICSEARCH)
 
-        # create search pattern
-        wildcards = []
-        wildcards.extend([{"wildcard": {"subject": {"value": f"*{item}*", "case_insensitive": True}}}
-                          for item in request.GET["subject"].split()])
-        wildcards.extend([{"wildcard": {"predicate": {"value": f"*{item}*", "case_insensitive": True}}}
-                          for item in request.GET["predicate"].split()])
-        wildcards.extend([{"wildcard": {"object": {"value": f"*{item}*", "case_insensitive": True}}}
-                          for item in request.GET["object"].split()])
-        search = {"size": 1000,
-                  "query":
-                  {"bool":
-                   {"must": wildcards}}}
-        try:
-            res = es.search(body=search, index="jvmg_search",)
-        except ConnectionError as e:
-            logger.error(f"No connection to elasticsearch: {settings.ELASTICSEARCH}")
-            raise e
+        search_filter = []
+        checked = []
+        for key in request.GET:
+            if key == "search":
+                continue
+            checked.extend(request.GET.getlist(key))
+            for item in request.GET.getlist(key):
+                search_filter.append({"term": {key: item}})
 
-        # change scoring and rewrite_URLs
-        new_score_res = []
-        for item in res["hits"]["hits"]:
-            score = SequenceMatcher(None, item["_source"]["subject"], request.GET["subject"]).ratio()
-            score += SequenceMatcher(None, item["_source"]["predicate"], request.GET["predicate"]).ratio()
-            score += SequenceMatcher(None, item["_source"]["object"], request.GET["object"]).ratio()
+        query = {"bool":
+                 {"must":
+                  [
+                      {"match": {"label": request.GET["search"]}}
+                  ],
+                  "filter": [{"bool": {"should": search_filter}}],
+                  "minimum_should_match": 0
+                  }}
 
-            object_link = None
-            if isinstance(item["_source"]["object"], URIRef):
-                object_link = rewrite_url(item["_source"]["object"])
-            new_item = {"subject_link": rewrite_url(item["_source"]["subject"]),
-                        "subject": item["_source"]["subject"],
-                        "predicate_link": rewrite_url(item["_source"]["predicate"]),
-                        "predicate": item["_source"]["predicate"],
-                        "object_link": object_link,
-                        "object": item["_source"]["object"],
-                        "score": score}
-            new_score_res.append(new_item)
+        facets = {"type": {"terms": {"field": "type", "size": 10000}},
+                  "graph": {"terms": {"field": "graph", "size": 10000}}}
 
-        new_score_res.sort(key=lambda item: item["score"], reverse=True)
-        context = {"table": new_score_res,
-                   "table_len": len(new_score_res),
-                   "subject": request.GET["subject"],
-                   "predicate": request.GET["predicate"],
-                   "object": request.GET["object"]}
+        search_res = es.search(query=query,
+                               index=settings.SEARCH_INDEX,
+                               highlight={"fields": {"label" : { "pre_tags" : ["<mark>"], "post_tags" : ["</mark>"] }}})
 
+        facet_res = es.search(query={"match": {"label": request.GET["search"]}}, aggregations=facets, size=0)
+
+        context = {
+            "search": request.GET["search"],
+            "total": search_res["hits"]["total"]["value"],
+            "aggs": facet_res["aggregations"],
+            "checked": checked
+        }
     return render(request, "jvmg/search.html", context)
 
 
-def uri_lookup_ont(request, path):
-    """
-    creates an ontology table.
+@csrf_exempt
+def get_search_page(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "invalid request"}, status=404)
+    else:
+        body = json.loads(request.body)
+        es = elasticsearch.Elasticsearch(settings.ELASTICSEARCH)
 
-    some URIs (like http://mediagraph.link/acdb/ont/) describe a ontology.
-    on this pages we need additional information about the ontology.
-    this function creates the usual table with information about the URI
-    but also creates an additional table with ontology information
-    """
+        search_filter = []
+        for key, items in body["checkboxes"].items():
+            search_filter.append({"terms": {key: items}})
+
+
+        if search_filter:
+            query = {"bool":
+                     {"must":
+                      [
+                          {"match": {"label": body["search"]}}
+                      ],
+                      "filter": [{"bool": {"must": search_filter}}]
+                      }}
+        else:
+            query = {"bool":
+                     {"must":
+                      [
+                          {"match": {"label": body["search"]}}
+                      ]}}
+
+        facets = {"type": {"terms": {"field": "type", "size": 10000}},
+                  "graph": {"terms": {"field": "graph", "size": 10000}}}
+
+        search_res = es.search(query=query,
+                               index=settings.SEARCH_INDEX,
+                               highlight={"fields": {"label" : { "pre_tags" : ["<mark>"], "post_tags" : ["</mark>"] }}},
+                               from_=settings.ELASTICSEARCH_PAGE_SIZE * int(body["page"]),
+                               size=settings.ELASTICSEARCH_PAGE_SIZE,
+                               aggregations=facets)
+
+        if search_res["hits"]["total"]["value"] == 0:
+            return JsonResponse({"error": "no data found"}, status=404)
+
+        hits = []
+        for entry in search_res["hits"]["hits"]:
+            for key in entry["_source"]:
+                if key in entry["highlight"]:
+                    entry["_source"][key] = entry["highlight"][key]
+
+            hits.append(entry["_source"])
+
+        facets = {}
+        for key in search_res["aggregations"]:
+            if key not in facets:
+                facets[key] = {}
+
+            for item in search_res["aggregations"][key]["buckets"]:
+                if item["key"] not in facets[key]:
+                    facets[key][item["key"]] = {}
+
+                facets[key][item["key"]] = item["doc_count"]
+
+        return JsonResponse({
+            "hits": hits,
+            "facets": facets
+        })
+
+
+def uri_lookup_ont(request, path):
     URI = path + "/ont/"
     context = get_data(URI, JSONLD, "text/html")
 

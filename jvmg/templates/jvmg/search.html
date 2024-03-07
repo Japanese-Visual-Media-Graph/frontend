@@ -20,39 +20,178 @@
       </a>
     </nav>
     <form action="{% url 'search' %}" method="GET">
-      <label for="subject">Subject</label>
-      <input type="text" name="subject" value="{{subject}}" placeholder="Optional">
-      <label for="predicate">Predicate</label>
-      <input type="text" name="predicate" value="{{predicate}}" placeholder="Optional">
-      <label for="object">Object</label>
-      <input type="text" name="object" value="{{object}}" placeholder="Optional">
-      <button>Search</button>
-    </form>
+      <input type="search" name="search" value="{{search}}"/>
+      <button class="button" value="search">Search</button>
 
-    {% if table %}
-    <br>
-    Entries found: {{table_len}}
-    <table>
-      <tr><th>Nr.</th><th>Subject-URI</th><th>Search Label</th></tr>
-      {% for item in table %}
-      <tr>
-        <td>{{forloop.counter}}</td>
-        <td>
-          <a href="{{item.subject_link}}">{{item.subject}}</a>
-        </td>
-        <td>
-          <a href="{{item.predicate_link}}">{{item.predicate}}</a>
-        </td>
-        <td>
-          {% if item.object_link %}
-            <a href="{{item.object_link}}">{{item.object}}</a>
-          {% else %}
-            {{item.object}}
-          {% endif %}
-        </td>
-      </tr>
+      {% for facet_name, facet in aggs.items %}
+      <fieldset name={{facet_name}}>
+        <legend>{{facet_name}}</legend>
+        {% for bucket in facet.buckets %}
+        {% if bucket.key in checked %}
+        <input type="checkbox" name="{{facet_name}}" id="{{bucket.key}}" value="{{bucket.key}}" checked>
+        {% else %}
+        <input type="checkbox" name="{{facet_name}}" id="{{bucket.key}}" value="{{bucket.key}}">
+        {% endif %}
+        <label for="{{bucket.key}}">
+          <span>{{bucket.key}}</span> <span>({{bucket.doc_count}})</span></label><br>
+        {% endfor %}
+      </fieldset>
       {% endfor %}
-    </table>
-    {% endif %}
+    </form>
+    <div name="searchResults">
   </body>
 </html>
+
+<script>
+  let currentPage = 0
+
+  let form = document.querySelector("form")
+  form.addEventListener("change", event => {
+    if (event.target.type == "checkbox"){
+      deleteSearchResults()
+      currentPage = 0
+      loadNewResults()
+    }
+  })
+
+  function deleteSearchResults(){
+    const tables = document.querySelectorAll('div[name="searchResults"] table');
+    if (tables) {
+      for (table of tables){
+        table.remove()
+      }
+    }
+  }
+
+  function createTablesForObjects(dataList) {
+    const container = document.querySelector('div[name="searchResults"]')
+
+    for (const item of dataList) {
+      const table = document.createElement('table');
+      const tbody = document.createElement('tbody');
+
+      // Create a row for each key-value pair
+      for (const [key, value] of Object.entries(item)) {
+        const row = document.createElement('tr');
+
+        // First column (keys)
+        const keyCell = document.createElement('td');
+        keyCell.textContent = key;
+        row.appendChild(keyCell);
+
+        // Second column (values)
+        const valueCell = document.createElement('td');
+        if(key == "uri"){  // special case for uri, to create a link
+          const a = document.createElement("a")
+          a.href = value
+          a.textContent = value
+          valueCell.appendChild(a)
+        } else {
+          if (Array.isArray(value)) {
+            // If the value is a list, create an unordered list
+            const ul = document.createElement('ul');
+            for (const listItem of value) {
+              const li = document.createElement('li');
+              li.innerHTML = listItem;
+              ul.appendChild(li);
+            }
+            valueCell.appendChild(ul);
+          } else {
+            // Otherwise, display the value directly
+            valueCell.innerHTML = value;
+          }
+        }
+
+        row.appendChild(valueCell);
+
+        tbody.appendChild(row);
+      }
+
+      table.appendChild(tbody);
+      container.appendChild(table);
+    }
+
+    return container;
+  }
+
+  function updateCheckboxCounters(facets){
+    for (fieldset of document.querySelectorAll('fieldset')){
+      for (label of fieldset.querySelectorAll('label')){
+        const spans = label.querySelectorAll('span')
+        if (spans[0].textContent in facets[fieldset.name]) {
+          const counter = facets[fieldset.name][spans[0].textContent]
+          spans[1].textContent = `(${counter})`
+        } else {
+          spans[1].textContent = ""
+        }
+      }
+    }
+  }
+
+  function getCheckedCheckboxesAndSearchFields() {
+    const checkboxes = document.querySelectorAll('input[type="checkbox"]:checked')
+
+    const obj = {}
+    for (const checkbox of checkboxes) {
+      if (obj[checkbox.name]) {
+        obj[checkbox.name].push(checkbox.value)
+      } else {
+        obj[checkbox.name] = [checkbox.value]
+      }
+    }
+
+    const searchField = document.querySelector('input[type="search"]')
+
+    return {search: searchField.value, checkboxes: obj}
+  }
+
+  function sendJSON(json) {
+    const url = "/applications/get_search_page"
+
+    const options = {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(json)
+    }
+
+    fetch(url, options)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error('Network response was not ok')
+        }
+        return response.json()
+      })
+      .then((data) => {
+        const table = createTablesForObjects(data["hits"])
+        document.querySelector("body").appendChild(table)
+        updateCheckboxCounters(data["facets"])
+      })
+      .catch((error) => {
+        console.error('There was a problem with the fetch operation:', error)
+      })
+  }
+
+  function loadNewResults() {
+    params = getCheckedCheckboxesAndSearchFields()
+    params["page"] = currentPage
+    console.log(params)
+    sendJSON(params)
+    currentPage += 1
+  }
+
+  function checkForPageEnd() {
+    const endOfPage = window.innerHeight*1.5 + window.pageYOffset >= document.body.offsetHeight
+
+    if (endOfPage) {
+      loadNewResults()
+    }
+    window.addEventListener("scroll", checkForPageEnd, {passive: true, once: true})
+  }
+
+  window.addEventListener("scroll", checkForPageEnd, {passive: true, once: true})
+  loadNewResults()
+
+</script>
