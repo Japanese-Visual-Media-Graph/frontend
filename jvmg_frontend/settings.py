@@ -176,7 +176,7 @@ CONSTRUCT {
 }
 """
 
-ELASTICSEARCH = "http://127.0.0.1:9200"
+ELASTICSEARCH = "http://localhost:9200"
 SEARCH_INDEX = "default"
 ELASTICSEARCH_PAGE_SIZE = 20
 

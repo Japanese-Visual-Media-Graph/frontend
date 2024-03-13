@@ -12,7 +12,7 @@
     <title>JVMG-Search</title>
   </head>
   <body>
-    <h1>JVMG-Search</h1>
+    <h1 class="search">JVMG-Search</h1>
     <nav>
       <a href="#" class=switch-mode>
         <span class=text-for-light>Light Mode</span>
@@ -20,25 +20,28 @@
       </a>
     </nav>
     <form action="{% url 'search' %}" method="GET">
-      <input type="search" name="search" value="{{search}}"/>
-      <button class="button" value="search">Search</button>
-
-      {% for facet_name, facet in aggs.items %}
-      <fieldset name={{facet_name}}>
-        <legend>{{facet_name}}</legend>
-        {% for bucket in facet.buckets %}
-        {% if bucket.key in checked %}
-        <input type="checkbox" name="{{facet_name}}" id="{{bucket.key}}" value="{{bucket.key}}" checked>
-        {% else %}
-        <input type="checkbox" name="{{facet_name}}" id="{{bucket.key}}" value="{{bucket.key}}">
-        {% endif %}
-        <label for="{{bucket.key}}">
-          <span>{{bucket.key}}</span> <span>({{bucket.doc_count}})</span></label><br>
+      <div class="searchfield">
+        <input type="search" name="search" value="{{search}}"/>
+        <button class="button" value="search">Search</button>
+      </div>
+      <div class="fieldsets">
+        {% for facet_name, facet in aggs.items %}
+        <fieldset name={{facet_name}}>
+          <legend>{{facet_name}}</legend>
+          {% for bucket in facet.buckets %}
+          {% if bucket.key in checked %}
+          <input type="checkbox" name="{{facet_name}}" id="{{bucket.key}}" value="{{bucket.key}}" checked>
+          {% else %}
+          <input type="checkbox" name="{{facet_name}}" id="{{bucket.key}}" value="{{bucket.key}}">
+          {% endif %}
+          <label for="{{bucket.key}}">
+            <span>{{bucket.key}}</span> <span>({{bucket.doc_count}})</span></label><br>
+          {% endfor %}
+        </fieldset>
         {% endfor %}
-      </fieldset>
-      {% endfor %}
+      </div>
     </form>
-    <div name="searchResults">
+    <div class="search" name="searchResults"></div>
   </body>
 </html>
 

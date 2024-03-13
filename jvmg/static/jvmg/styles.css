@@ -62,3 +62,35 @@ html.dark-mode div.dropdown > div {background: hsl(0, 0%, 16%);}
 hr { border: none; height: 2px; background-color: lightgray; margin-top: 40px; }
 
 table.blank_node { margin: 0.5em 0em 0.5em 0em; border-style: solid; border-color: hsl(210, 60%, 35%); border-width: 1px; }
+
+mark { background-color: #A0FDA3; }
+
+div.search table {
+    border: 2px solid hsl(210, 60%, 35%);
+    border-radius: 5px;
+    margin-top: 10px;
+}
+
+fieldset {
+    border: 2px solid hsl(210, 60%, 35%);
+    border-radius: 5px;
+    width: 50%;
+}
+
+div.fieldsets{
+    display: flex;
+    margin-bottom: 2em;
+}
+
+div.searchfield {
+    display: flex;
+    justify-content: center;
+}
+
+div.searchfield input {
+    width: 400px;
+    height: 40px;
+    font-size: 16px;
+}
+
+h1.search { text-align: center; }
