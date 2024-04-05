@@ -1,4 +1,5 @@
 from dataclasses import InitVar, dataclass, field
+from io import StringIO
 from typing import Tuple, Union
 from urllib.error import URLError
 from django.http.response import JsonResponse
@@ -7,7 +8,7 @@ from django.http import Http404, HttpResponse
 from django.core.validators import URLValidator
 from django.core.exceptions import ValidationError
 from django.views.decorators.csrf import csrf_exempt
-from SPARQLWrapper import SPARQLWrapper, XML, JSONLD, TURTLE, JSON
+from SPARQLWrapper import SPARQLWrapper, XML, JSONLD, TURTLE, JSON, CSV
 import rdflib
 from rdflib import ConjunctiveGraph, Literal, URIRef, BNode
 from rdflib.term import Node
@@ -16,7 +17,7 @@ from time import perf_counter
 import elasticsearch
 import logging
 import json
-
+from csv import DictReader
 
 logger = logging.getLogger("default")
 slow_logger = logging.getLogger("slow")
@@ -258,38 +259,31 @@ def search(request):
     if "search" in request.GET:
         es = elasticsearch.Elasticsearch(settings.ELASTICSEARCH)
 
-        search_filter = []
         checked = []
+        search_type = "match"
+        print(request.GET)
         for key in request.GET:
             if key == "search":
                 continue
+            if key == "btn" and request.GET["btn"] == "exact":
+                search_type = "match_phrase"
+                continue
             checked.extend(request.GET.getlist(key))
-            for item in request.GET.getlist(key):
-                search_filter.append({"term": {key: item}})
-
-        query = {"bool":
-                 {"must":
-                  [
-                      {"match": {"label": request.GET["search"]}}
-                  ],
-                  "filter": [{"bool": {"should": search_filter}}],
-                  "minimum_should_match": 0
-                  }}
 
         facets = {"type": {"terms": {"field": "type", "size": 10000}},
                   "graph": {"terms": {"field": "graph", "size": 10000}}}
 
-        search_res = es.search(query=query,
-                               index=settings.SEARCH_INDEX,
-                               highlight={"fields": {"label" : { "pre_tags" : ["<mark>"], "post_tags" : ["</mark>"] }}})
-
-        facet_res = es.search(query={"match": {"label": request.GET["search"]}}, aggregations=facets, size=0)
+        facet_res = es.search(index=settings.SEARCH_INDEX,
+                              query={search_type: {"label": request.GET["search"]}},
+                              aggregations=facets,
+                              size=0)
 
         context = {
             "search": request.GET["search"],
-            "total": search_res["hits"]["total"]["value"],
+            "total": facet_res["hits"]["total"]["value"],
             "aggs": facet_res["aggregations"],
-            "checked": checked
+            "checked": checked,
+            "search_type": search_type
         }
     return render(request, "jvmg/search.html", context)
 
@@ -303,15 +297,15 @@ def get_search_page(request):
         es = elasticsearch.Elasticsearch(settings.ELASTICSEARCH)
 
         search_filter = []
+        search_type = body["search_type"]
         for key, items in body["checkboxes"].items():
             search_filter.append({"terms": {key: items}})
-
 
         if search_filter:
             query = {"bool":
                      {"must":
                       [
-                          {"match": {"label": body["search"]}}
+                          {search_type: {"label": body["search"]}}
                       ],
                       "filter": [{"bool": {"must": search_filter}}]
                       }}
@@ -319,7 +313,7 @@ def get_search_page(request):
             query = {"bool":
                      {"must":
                       [
-                          {"match": {"label": body["search"]}}
+                          {search_type: {"label": body["search"]}}
                       ]}}
 
         facets = {"type": {"terms": {"field": "type", "size": 10000}},
@@ -358,47 +352,6 @@ def get_search_page(request):
             "hits": hits,
             "facets": facets
         })
-
-
-def uri_lookup_ont(request, path):
-    URI = path + "/ont/"
-    context = get_data(URI, JSONLD, "text/html")
-
-    URI = settings.DATASET_BASE + URI
-    query = f"""
-    PREFIX defined: <http://www.w3.org/2000/01/rdf-schema#isDefinedBy>
-    PREFIX comment: <http://www.w3.org/2000/01/rdf-schema#comment>
-    PREFIX label: <http://www.w3.org/2000/01/rdf-schema#label>
-
-    SELECT ?s ?Property ?comment
-    WHERE {{
-      ?s defined: <{URI}>.
-      ?s comment: ?comment.
-      ?s label: ?Property
-    }}
-    """
-    sparql = SPARQLWrapper(settings.SPARQL_ENDPOINT)
-    sparql.setQuery(query)
-    sparql.setReturnFormat(JSON)
-    result = sparql.query().convert()
-    ont_table = {"header": result["head"]["vars"], "data": []}
-    for item in result["results"]["bindings"]:
-        row = []
-        for header in ont_table["header"]:
-            if item[header]["type"] == "uri":
-                row.append(rewrite_url(item[header]["value"]))
-            else:
-                row.append(item[header]["value"])
-        ont_table["data"].append(row)
-
-    if not ont_table["data"]:
-        ont_table = None
-    else:
-        ont_table["data"].sort(key=lambda item: item[1])
-
-    context["ont_table"] = ont_table
-
-    return render(request, "jvmg/ont_table.html", context)
 
 
 def uri_crosstab(request):
@@ -443,3 +396,25 @@ def uri_crosstab(request):
     context["table"] = trait_count
     context["resource_label"] = resource_uri
     return render(request, "jvmg/count_table.html", context)
+
+
+def overview(request):
+    sparql = SPARQLWrapper(settings.SPARQL_ENDPOINT)
+    sparql.setQuery(settings.QUERY_OVERVIEW)
+    sparql.setReturnFormat(CSV)
+    result = sparql.query().convert()
+    data = list(DictReader(StringIO(result.decode("utf-8"))))
+    group_by_graph = {}
+    for item in data:
+        if not item["graph_label"]:
+            item["graph_label"] = "<no graph found>"
+        if item["graph"] not in group_by_graph:
+            group_by_graph[item["graph"]] = []
+        group_by_graph[item["graph"]].append(item)
+        item["order"] = int(item["order"])
+        item["count"] = int(item["count"])
+
+    for item in group_by_graph.values():
+        item.sort(key=lambda i: i["order"])
+
+    return render(request, "jvmg/overview.html", context={"sources": group_by_graph.values()})

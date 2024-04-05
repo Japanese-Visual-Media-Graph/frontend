@@ -3,7 +3,7 @@ html { font-family: sans-serif; background: hsl(0, 0%, 95%); color: hsl(0, 0%, 1
 body { background: white; box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
   margin: 0; padding: 20px; position: relative; }
 
-h1 { font-size: 35px; margin: 0; padding: 10px 0 20px 10px; }
+h1 { font-size: 35px; margin: 0; padding: 10px 0 20px 10px; text-align: center; }
 a { color: hsl(210, 60%, 50%); text-decoration: none; }
 a:hover, a:focus, a:active { color: hsl(210, 60%, 25%); text-decoration: underline; }
 
@@ -94,3 +94,18 @@ div.searchfield input {
 }
 
 h1.search { text-align: center; }
+
+div.overview {
+    display: flex;
+}
+
+div.card {
+    margin: 1em;
+    width: 400px;
+    border: 2px solid hsl(210, 60%, 35%);
+    border-radius: 5px;
+}
+
+div.overview h2 {
+    justify-content: center;
+}

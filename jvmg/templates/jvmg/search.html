@@ -22,7 +22,8 @@
     <form action="{% url 'search' %}" method="GET">
       <div class="searchfield">
         <input type="search" name="search" value="{{search}}"/>
-        <button class="button" value="search">Search</button>
+        <button class="button" name="btn" value="search">search</button>
+        <button class="button" name="btn" value="exact">exact match</button>
       </div>
       <div class="fieldsets">
         {% for facet_name, facet in aggs.items %}
@@ -47,6 +48,7 @@
 
 <script>
   let currentPage = 0
+  let search_type = "{{search_type}}"
 
   let form = document.querySelector("form")
   form.addEventListener("change", event => {
@@ -180,6 +182,7 @@
   function loadNewResults() {
     params = getCheckedCheckboxesAndSearchFields()
     params["page"] = currentPage
+    params["search_type"] = search_type
     console.log(params)
     sendJSON(params)
     currentPage += 1

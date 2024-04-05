@@ -176,6 +176,68 @@ CONSTRUCT {
 }
 """
 
+QUERY_CLUSTER = """
+PREFIX label: <http://www.w3.org/2000/01/rdf-schema#label>
+PREFIX graph_label: <http://mediagraph.link/jvmg/ont/shortLabel>
+PREFIX has_member: <http://mediagraph.link/jvmg/ont/hasMember>
+
+CONSTRUCT {
+  Graph ?graph {
+    ?s ?p ?o .
+  }
+  ?s label: ?s_label .
+  ?p label: ?p_label .
+  ?o label: ?o_label .
+
+  GRAPH ?other_graph {
+    ?s ?p_other ?o_other.
+    ?o_other ?p_blank ?o_blank .
+  }
+  ?p_other label: ?p_other_label .
+  ?o_other label: ?o_other_label .
+  ?p_blank label: ?p_blank_label .
+  ?o_blank label: ?o_blank_label .
+  ?graph graph_label: ?graph_label .
+  ?other_graph graph_label: ?other_graph_label .
+} where {
+  { GRAPH ?graph {  ?s ?p ?o . filter(?s = <$resource>) }
+    OPTIONAL { ?graph graph_label: ?graph_label}
+    OPTIONAL { ?s label: ?s_label}
+    OPTIONAL { ?p label: ?p_label}
+    OPTIONAL { ?o label: ?o_label}
+    OPTIONAL { ?s has_member: ?o
+      OPTIONAL { GRAPH ?other_graph { ?o ?p_other ?o_other . }
+        OPTIONAL { ?o_other ?p_blank ?o_blank filter isBlank(?o_other)
+          OPTIONAL { ?p_blank label: ?p_blank_label }
+          OPTIONAL { ?o_blank label: ?o_blank_label }
+        }
+        OPTIONAL { ?other_graph graph_label: ?other_graph_label}
+        OPTIONAL { ?p_other label: ?p_other_label}
+        OPTIONAL { ?o_other label: ?o_other_label}
+      }
+    }
+  } UNION {
+    GRAPH ?graph {?s ?p ?o . filter(?o = <$resource>)}
+    OPTIONAL { ?graph graph_label: ?graph_label}
+    OPTIONAL { ?s label: ?s_label}
+    OPTIONAL { ?p label: ?p_label}
+  }
+}
+"""
+
+QUERY_OVERVIEW = """
+PREFIX jvmg: <http://mediagraph.link/jvmg/ont/> 
+
+SELECT ?type ?label ?order ?count ?graph ?graph_label WHERE {
+  ?type jvmg:order ?order .
+  ?type jvmg:count ?count .
+  OPTIONAL { 
+    GRAPH ?graph { ?type <http://www.w3.org/2000/01/rdf-schema#label> ?label  }
+    ?graph <http://mediagraph.link/jvmg/ont/shortLabel> ?graph_label 
+  }
+}
+"""
+
 ELASTICSEARCH = "http://localhost:9200"
 SEARCH_INDEX = "default"
 ELASTICSEARCH_PAGE_SIZE = 20

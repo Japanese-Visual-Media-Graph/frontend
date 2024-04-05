@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+{% load static %}
+<meta charset="utf-8">
+<link rel="stylesheet" type="text/css" href="{% static 'jvmg/styles.css' %}">
+<script rel="javascript" src="{% static 'jvmg/scripts.js' %}"></script>
+<h1>Overview</h1>
+<div class="overview">
+  {% for source in sources %}
+  <div class="card">
+    <h2>{{source.0.graph_label}}</h2>
+    <table>
+    {% for entry in source %}
+    <tr>
+      <td>
+      {% if entry.label %}
+      <a href="{{entry.type}}">{{entry.label}}
+      {% else %}
+      <a href="{{entry.type}}">{{entry.type}}
+      {% endif %}
+      </td>
+      <td>{{entry.count}}</td>
+    </tr>
+    {% endfor %}
+    </table>
+  </div>
+  {% endfor %}
+</div>
+
+{% include "jvmg/footer.html" %}
