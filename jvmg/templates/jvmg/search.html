@@ -23,7 +23,7 @@
       <div class="searchfield">
         <input type="search" name="search" value="{{search}}"/>
         <button class="button" name="btn" value="search">search</button>
-        <button class="button" name="btn" value="exact">exact match</button>
+        <button class="button" name="btn" value="phrase">match phrase</button>
       </div>
       <div class="fieldsets">
         {% for facet_name, facet in aggs.items %}

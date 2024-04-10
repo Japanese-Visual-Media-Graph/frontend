@@ -265,7 +265,7 @@ def search(request):
         for key in request.GET:
             if key == "search":
                 continue
-            if key == "btn" and request.GET["btn"] == "exact":
+            if key == "btn" and request.GET["btn"] == "phrase":
                 search_type = "match_phrase"
                 continue
             checked.extend(request.GET.getlist(key))
